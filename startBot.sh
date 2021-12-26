@@ -1,0 +1,1 @@
+node index.js >./checkerCrypto/bot_$(date +"%d-%m-%y_%H:%M").log 2>&1
