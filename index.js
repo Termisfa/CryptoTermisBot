@@ -559,10 +559,8 @@ function CheckAlerts(coinAddress, price)
                 var newDate = Helpers.AddHoursToDate(alertsCooldown, rowAlerts.lastAlert)
                 var sql2 = "select priceUsd from prices where coinAddress = '" + coinAddress + "' and priceDate >= '" + Helpers.DateToSql(newDate) + "'";
                 dbCon.ExecuteQueryAsync(sql2, (tablePrices,err) => {
-                  tablePrices.forEach(rowPrices => {
-                    if(Helpers.IsGreaterOrLesserHandler(alertType, rowAlerts.priceUsd, rowPrices.priceUsd))
-                      NotifyAlert(rowAlerts, price);
-                  });
+                  LoopCheckAlerts(tablePrices, alertType, rowAlerts);
+                  
                 });
               }
             }
@@ -573,6 +571,17 @@ function CheckAlerts(coinAddress, price)
   } catch (error) {
     BotLog(error, error, "CheckAlerts", true)
   }
+}
+
+function LoopCheckAlerts(tablePrices, alertType, rowAlerts)
+{
+  tablePrices.forEach(rowPrices => {
+    if(Helpers.IsGreaterOrLesserHandler(alertType, rowAlerts.priceUsd, rowPrices.priceUsd))
+    {
+      NotifyAlert(rowAlerts, price);
+      return;
+    }
+  });
 }
 
 function NotifyAlert(alertsRow, price) 
