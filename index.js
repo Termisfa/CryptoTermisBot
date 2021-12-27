@@ -11,8 +11,7 @@ const prefix = process.env.PREFIX;
 
 
 
-const { Client, Intents, Channel } = require('discord.js');
-const { channel } = require('diagnostics_channel');
+const { Client, Intents, Channel, Message } = require('discord.js');
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 
@@ -444,6 +443,10 @@ function DeleteMessages(ammount, channel)
   
 }
 
+function IsAdmin(message)
+{
+  if(user)
+}
 
 async function FillDB()
 {
@@ -594,7 +597,7 @@ function UpdateResume(coinAddress, dataFromHttps)
                     coinName = dataFromHttps.data.name.trim();
 
                     messages.forEach(message => {
-                        if(message.content.includes(coinName))
+                        if(message.content.includes(coinName) || message.content.includes("en este canal. Ver todos los")) //To remove previous msgs and pinned alerts
                           message.delete();
                       });
 
