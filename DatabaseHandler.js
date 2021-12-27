@@ -20,7 +20,7 @@ module.exports = class DatabaseHandler
 
         // pool = mysql.createPool({
         //     host     : 'localhost',
-        //     port     : '33060',
+        //     port     : '33061',
         //     database : 'cryptobot',
         //     user     : 'root',
         //     password : 'secret',

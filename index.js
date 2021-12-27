@@ -46,18 +46,21 @@ function BotLog(discordMsg, logMsg, method, error = false)
  }
 
 
-client.once('ready', c => {
-  BotLog("Bot iniciado", '', "onReady")
-});
 
 var DatabaseHandler = require('./DatabaseHandler')
 var dbCon = DatabaseHandler.from(BotLog)
 
-var Constants = require('./Constants')
+var Constants = require('./Constants');
+const { table } = require('console');
 var _constants = Constants.from(BotLog, dbCon)
 
 var Helpers = require('./Helpers')(BotLog, _constants)
 
+
+client.once('ready', c => {
+  BotLog("Bot iniciado", '', "onReady")
+  LoadResumeAlerts()
+});
 
 
 
@@ -416,6 +419,9 @@ function GetAlertsList(userId, callback)
       msg += "Moneda: <#" + result.idChannel + "> PrecioUSD: `" + result.priceUsd + "` Tipo de alerta: `" + result.alertType + "`\n";
     });
 
+    if(results[0] == undefined)
+      msg += "No tienes ninguna alerta";
+
     callback(msg)
   });
 }
@@ -529,7 +535,7 @@ async function FillPriceDB(channelInfo)
               return BotLog(resultSqlPrevprice.sqlMessage, resultSqlPrevprice, 'FillPriceDB', true)
 
             if(resultSqlPrevprice[0] != undefined)
-              previousPrice = resultSqlPrevprice[0][0];
+              previousPrice = resultSqlPrevprice[0].priceUsd;
 
             GetDataFromHttps(_constants.GetConstant('urlApi') + coinAddress, (dataFromHttps,err) => {
               if (err) return BotLog(error, error, 'FillPriceDB', true);
@@ -567,13 +573,14 @@ async function FillPriceDB(channelInfo)
 function UpdateResume(coinAddress, dataFromHttps)
 {
   try {
-    coinName = dataFromHttps.data.name;
 
     Helpers.GetCoinChannelFromAddress(coinAddress, dbCon, client, (coinChannel,err) => {
       if(!err)
       {
         var sql = "select distinct userId from alerts where coinAddress = '" + coinAddress + "'";
         dbCon.ExecuteQueryAsync(sql, (tableUserId,err) => {
+          if(tableUserId[0] == undefined)
+            return;
           if(!err)
           {
             tableUserId.forEach(rowUserId => {
@@ -583,6 +590,9 @@ function UpdateResume(coinAddress, dataFromHttps)
                   var resumeChannel = Helpers.GetGuild(client).channels.cache.find(w => w.parentId == categoryChannelId && w.name.includes("resumen"));
 
                   resumeChannel.messages.fetch({ limit: 100 }).then(messages => {
+
+                    coinName = dataFromHttps.data.name.trim();
+
                     messages.forEach(message => {
                         if(message.content.includes(coinName))
                           message.delete();
@@ -704,6 +714,16 @@ function GetDataFromHttps(url, callback)
 }
      
 
+
+function LoadResumeAlerts()
+{
+  dbCon.ExecuteQueryAsync("select id from users where active = true", (tableUsers,err) => {
+
+    tableUsers.forEach(user => {
+      UpdateAlertsResume(user.id)
+    });
+  });
+}
 
 
 

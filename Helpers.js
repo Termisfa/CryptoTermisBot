@@ -12,7 +12,7 @@ module.exports = function(BotLog, constants){
             var emote = "";
         
             var actualPrice = parsedData.data.price
-        
+
             if(previousPrice != 0)
             {
               if(Number(previousPrice) < Number(actualPrice))
@@ -38,10 +38,10 @@ module.exports = function(BotLog, constants){
         static FormatDataFromHttpsToResumeChannel(parsedData, coinChannel)
         {
           try {
-            var answer = "";
+            let answer = new Array(60).join('-') + "\n";
 
-            answer += "Nombre: `" + parsedData.data.name + "`\n"
-            answer += "Símbolo: `" + parsedData.data.symbol + "`\n"
+            answer += "Nombre: `" + parsedData.data.name.trim() + "`\n"
+            answer += "Símbolo: `" + parsedData.data.symbol.trim() + "`\n"
             answer += "Canal: " + coinChannel.toString() + "\n"
             answer += "Actualizado: `" + timeConverter(parsedData.updated_at) + "`\n";
             answer += "Precio USD: `" + parsedData.data.price.substr(0, constants.GetConstant('priceLength')) + "`";
@@ -129,8 +129,7 @@ module.exports = function(BotLog, constants){
         static GetCoinChannelFromAddress(coinAddress, dbCon, client, callback)
         {
           try {
-            var sql = "select idChannel from coins where address = '" + coinAddress + "'";
-      
+            var sql = "select * from coins where address like '" + coinAddress + "'";
             dbCon.ExecuteQueryAsync(sql, (table,err) => {
               if(!err)
                 callback(client.guilds.cache.get(constants.GetConstant('serverId')).channels.cache.get(table[0].idChannel));
@@ -144,10 +143,9 @@ module.exports = function(BotLog, constants){
         {
           try {
             var sql = "select idCategoryChannel from users where id = '" + userId + "'";
-      
             dbCon.ExecuteQueryAsync(sql, (table,err) => {
               if(!err)
-                callback(table[0].idCategoryChannel);
+                  callback(table[0].idCategoryChannel);
             });
           } catch (error) {
             BotLog(error, error, "GetCategoryChannelIdFromUserId", true)
@@ -156,7 +154,11 @@ module.exports = function(BotLog, constants){
 
         static GetGuild(client)
         {
-          return getGuild(client);
+          try {
+            return client.guilds.cache.get(constants.GetConstant('serverId'));
+          } catch (error) {
+            BotLog(error, error, "GetCategoryChannelIdFromUserId", true)
+          }
         }
 
 
@@ -173,7 +175,8 @@ function getGuild(client)
   return client.guilds.cache.get(constants.GetConstant('serverId'));
   
   } catch (error) {
-    BotLog(error, error, "getGuild", true)
+    console.log(error)
+    throw error
   }
 }
 
@@ -192,7 +195,8 @@ function timeConverter(UNIX_timestamp)
         var time = day + ' ' + month + ' ' + year + ' ' + hour.substr(-2) + ':' + min.substr(-2) + ':' + sec.substr(-2) ;
         return time;
       } catch (error) {
-        BotLog(error, error, "TimeConverter", true)
+        console.log(error)
+        throw error
       }
 }
 
