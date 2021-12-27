@@ -274,6 +274,7 @@ try {
                         
                         dbCon.ExecuteQuery("insert into alerts(userId, coinAddress, priceUsd, alertType) values ('" + message.member.id + "', '" + coinAddress + "', '" + price +"', '" + alertType +"')")
                         message.reply("Alerta añadida");
+                        UpdateAlertsResume(message.member.id)
   
                       });
                     }
@@ -286,12 +287,7 @@ try {
 
           case "LISTARALERTAS":
             {
-              dbCon.ExecuteQueryAsync("select idChannel, priceUsd, alertType from alerts, coins where coinAddress = address and userId = '" + message.member.id + "'", (results,err) => {
-                var msg = "";
-                results.forEach(result => {
-                  msg += "Moneda: <#" + result.idChannel + "> PrecioUSD: `" + result.priceUsd + "` Tipo de alerta: `" + result.alertType + "`\n";
-                });
-
+              GetAlertsList(message.member.id, (msg,err) => {
                 message.reply(msg);
               });
             }
@@ -331,6 +327,7 @@ try {
                           {
                             dbCon.ExecuteQuery("delete from alerts " + sqlWhere);
                             message.reply("Alerta eliminada");
+                            UpdateAlertsResume(message.member.id)
                           }
                           else
                             message.reply("No se ha encontrado la alerta");
@@ -384,12 +381,44 @@ try {
             }
             break;
     }
-  
   })
 } catch (error) {
   BotLog(error, error, "onMessageCreate", true)
 }
 
+function UpdateAlertsResume(userId)
+{
+  GetAlertsList(userId, (msgToSend,err) => {
+    Helpers.GetCategoryChannelIdFromUserId(userId, dbCon, (categoryChannelId,err) => {
+      if(!err)
+      {
+        var resumeChannel = Helpers.GetGuild(client).channels.cache.find(w => w.parentId == categoryChannelId && w.name.includes("resumen"));
+
+        resumeChannel.messages.fetchPinned()
+        .then(messages => {
+          messages.forEach(pinnedMessage => {
+            if(pinnedMessage.content.includes("Resumen de alertas actuales"))
+              pinnedMessage.delete();
+          });          
+          
+        resumeChannel.send(msgToSend).then((msg) => msg.pin())
+        });
+      }
+    });
+  });
+}
+
+function GetAlertsList(userId, callback)
+{
+  dbCon.ExecuteQueryAsync("select idChannel, priceUsd, alertType from alerts, coins where coinAddress = address and userId = '" + userId + "'", (results,err) => {
+    var msg = "Resumen de alertas actuales: \n";
+    results.forEach(result => {
+      msg += "Moneda: <#" + result.idChannel + "> PrecioUSD: `" + result.priceUsd + "` Tipo de alerta: `" + result.alertType + "`\n";
+    });
+
+    callback(msg)
+  });
+}
 
 function DeleteMessages(ammount, channel)
 {
@@ -516,8 +545,9 @@ async function FillPriceDB(channelInfo)
                     dbCon.ExecuteQueryAsync("insert into prices values('" + coinAddress + "', '" + dataFromHttps.data.price + "', '" + sqlDateTime + "')", (results,err) => {
                       if(!err)
                       {
-                        channelInfo.send(Helpers.FormatDataFromHttpsToBd(dataFromHttps, previousPrice))
+                        channelInfo.send(Helpers.FormatDataFromHttpsToDatabaseChannel(dataFromHttps, previousPrice))
                         CheckAlerts(coinAddress, dataFromHttps.data.price)
+                        UpdateResume(coinAddress, dataFromHttps)
                       }
                     });
                   }
@@ -534,6 +564,43 @@ async function FillPriceDB(channelInfo)
   }
 }
 
+function UpdateResume(coinAddress, dataFromHttps)
+{
+  try {
+    coinName = dataFromHttps.data.name;
+
+    Helpers.GetCoinChannelFromAddress(coinAddress, dbCon, client, (coinChannel,err) => {
+      if(!err)
+      {
+        var sql = "select distinct userId from alerts where coinAddress = '" + coinAddress + "'";
+        dbCon.ExecuteQueryAsync(sql, (tableUserId,err) => {
+          if(!err)
+          {
+            tableUserId.forEach(rowUserId => {
+              Helpers.GetCategoryChannelIdFromUserId(rowUserId.userId, dbCon, (categoryChannelId,err) => {
+                if(!err)
+                {
+                  var resumeChannel = Helpers.GetGuild(client).channels.cache.find(w => w.parentId == categoryChannelId && w.name.includes("resumen"));
+
+                  resumeChannel.messages.fetch({ limit: 100 }).then(messages => {
+                    messages.forEach(message => {
+                        if(message.content.includes(coinName))
+                          message.delete();
+                      });
+
+                    resumeChannel.send(Helpers.FormatDataFromHttpsToResumeChannel(dataFromHttps, coinChannel));
+                  });
+                }
+              });
+            });
+          }
+        });
+      }
+    });
+  } catch (error) {
+    BotLog(error, error, "UpdateResume", true)
+  }
+}
 
 
 function CheckAlerts(coinAddress, price)
@@ -559,8 +626,15 @@ function CheckAlerts(coinAddress, price)
                 var newDate = Helpers.AddHoursToDate(alertsCooldown, rowAlerts.lastAlert)
                 var sql2 = "select priceUsd from prices where coinAddress = '" + coinAddress + "' and priceDate >= '" + Helpers.DateToSql(newDate) + "'";
                 dbCon.ExecuteQueryAsync(sql2, (tablePrices,err) => {
-                  LoopCheckAlerts(tablePrices, alertType, rowAlerts, price);
-                  
+
+                  for (let i = 0; i < tablePrices.length; i++) 
+                  {
+                    if(Helpers.IsGreaterOrLesserHandler(alertType, rowAlerts.priceUsd, tablePrices[i].priceUsd))
+                    {
+                      NotifyAlert(rowAlerts, price);
+                      break;
+                    }
+                  }
                 });
               }
             }
@@ -571,17 +645,6 @@ function CheckAlerts(coinAddress, price)
   } catch (error) {
     BotLog(error, error, "CheckAlerts", true)
   }
-}
-
-function LoopCheckAlerts(tablePrices, alertType, rowAlerts, price)
-{
-  tablePrices.forEach(rowPrices => {
-    if(Helpers.IsGreaterOrLesserHandler(alertType, rowAlerts.priceUsd, rowPrices.priceUsd))
-    {
-      NotifyAlert(rowAlerts, price);
-      return;
-    }
-  });
 }
 
 function NotifyAlert(alertsRow, price) 
