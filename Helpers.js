@@ -1,6 +1,6 @@
 
 
-module.exports = function(BotLog, constants){
+module.exports = function(BotLog, _constants){
     class Helpers{
         
       
@@ -21,7 +21,7 @@ module.exports = function(BotLog, constants){
                 emote = " :point_down: ";
             }
 
-            actualPrice = actualPrice.substr(0, constants.GetConstant('priceLength'))
+            actualPrice = actualPrice.substr(0, _constants.GetConstant('priceLength'))
         
             answer += "Actualizado: `" + timeConverter(parsedData.updated_at) + "`\n";
             // answer += "Nombre: `" + parsedData.data.name + "`\n"
@@ -44,8 +44,8 @@ module.exports = function(BotLog, constants){
             answer += "Símbolo: `" + parsedData.data.symbol.trim() + "`\n"
             answer += "Canal: " + coinChannel.toString() + "\n"
             answer += "Actualizado: `" + timeConverter(parsedData.updated_at) + "`\n";
-            answer += "Precio USD: `" + parsedData.data.price.substr(0, constants.GetConstant('priceLength')) + "`\n";
-            answer += constantes.GetConstant('urlPooCoin') + coinAddress;
+            answer += "Precio USD: `" + parsedData.data.price.substr(0, _constants.GetConstant('priceLength')) + "`\n";
+            answer += _constants.GetConstant('urlPooCoin') + coinAddress;
 
             return answer;
 
@@ -133,7 +133,7 @@ module.exports = function(BotLog, constants){
             var sql = "select * from coins where address like '" + coinAddress + "'";
             dbCon.ExecuteQueryAsync(sql, (table,err) => {
               if(!err)
-                callback(client.guilds.cache.get(constants.GetConstant('serverId')).channels.cache.get(table[0].idChannel));
+                callback(client.guilds.cache.get(_constants.GetConstant('serverId')).channels.cache.get(table[0].idChannel));
             });
           } catch (error) {
             BotLog(error, error, "GetCoinChannelFromAddress", true)
@@ -156,7 +156,7 @@ module.exports = function(BotLog, constants){
         static GetGuild(client)
         {
           try {
-            return client.guilds.cache.get(constants.GetConstant('serverId'));
+            return client.guilds.cache.get(_constants.GetConstant('serverId'));
           } catch (error) {
             BotLog(error, error, "GetCategoryChannelIdFromUserId", true)
           }
