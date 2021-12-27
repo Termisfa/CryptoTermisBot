@@ -598,7 +598,7 @@ function UpdateResume(coinAddress, dataFromHttps)
                           message.delete();
                       });
 
-                    resumeChannel.send(Helpers.FormatDataFromHttpsToResumeChannel(dataFromHttps, coinChannel));
+                    resumeChannel.send(Helpers.FormatDataFromHttpsToResumeChannel(dataFromHttps, coinChannel, coinAddress));
                   });
                 }
               });

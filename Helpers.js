@@ -35,7 +35,7 @@ module.exports = function(BotLog, constants){
           }
         }
 
-        static FormatDataFromHttpsToResumeChannel(parsedData, coinChannel)
+        static FormatDataFromHttpsToResumeChannel(parsedData, coinChannel, coinAddress)
         {
           try {
             let answer = new Array(60).join('-') + "\n";
@@ -44,7 +44,8 @@ module.exports = function(BotLog, constants){
             answer += "Símbolo: `" + parsedData.data.symbol.trim() + "`\n"
             answer += "Canal: " + coinChannel.toString() + "\n"
             answer += "Actualizado: `" + timeConverter(parsedData.updated_at) + "`\n";
-            answer += "Precio USD: `" + parsedData.data.price.substr(0, constants.GetConstant('priceLength')) + "`";
+            answer += "Precio USD: `" + parsedData.data.price.substr(0, constants.GetConstant('priceLength')) + "`\n";
+            answer += constantes.GetConstant('urlPooCoin') + coinAddress;
 
             return answer;
 
