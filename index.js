@@ -1,4 +1,5 @@
 const https = require('https');
+const fs = require('fs');
 
 const dotenv = require('dotenv');
 dotenv.config();
@@ -19,7 +20,7 @@ client.login(token);
 
 // const urlApi = 'https://api.pancakeswap.info/api/v2/tokens/';
 const exampleAddAlert = "Ejemplo: `" + prefix + "addalert #wbnb 0.23 sube`";
-const alertWords = ["SUBE", "BAJA"];
+// const alertWords = ["SUBE", "BAJA"];
 
 
 
@@ -50,10 +51,39 @@ var DatabaseHandler = require('./DatabaseHandler')
 var dbCon = DatabaseHandler.from(BotLog)
 
 var Constants = require('./Constants');
-const { table } = require('console');
 var _constants = Constants.from(BotLog, dbCon)
 
+// const { table } = require('console');
+
+var AlertTypes = require('./AlertTypes');
+var _alertTypes = AlertTypes.from(BotLog)
+
+
 var Helpers = require('./Helpers')(BotLog, _constants)
+
+
+const schedule = require('node-schedule');
+
+schedule.scheduleJob('0 0 0 * * ?', () => MysqlBackup()); //Every day at midnight - 12am
+
+function MysqlBackup()
+{
+  var guild = Helpers.GetGuild(client);
+
+  
+
+  let ahora = new Date()
+  let path = './checker/'
+
+  fs.closeSync(fs.openSync(path + ahora.getHours(), 'w'))
+
+  ahora.setHours(ahora.getHours() - 1)
+
+  path += ahora.getHours();
+
+  if(fs.existsSync(path))
+    fs.unlinkSync(path) //Borrar el archivo de la hora anterior si existe  
+}
 
 
 client.once('ready', c => {
@@ -90,7 +120,15 @@ function NewMember(member, channel)
     dbCon.ExecuteQueryAsync("select * from users where id = '" + member.id + "'", (results,err) => {
 
       if(results[0] != undefined && results[0].active)
-        return channel.send("El usuario " + member.toString() + " ya estaba activo");
+      {
+        if(results[0].active)
+          return channel.send("El usuario " + member.toString() + " ya estaba activo");
+        else
+        {
+          dbCon.ExecuteQuery("update users set active = true where id = '" + member.id + "'");
+          return channel.send("Usuario " + member.toString() + " reactivado")
+        }
+      }
 
       guild.roles.create({ name: member.user.username + 'Rol'}).then(role => {
         member.roles.add(role);
@@ -169,219 +207,355 @@ try {
     if (message.author.bot) return;
     if (!message.content.startsWith(prefix)) return;
   
-    const commandBody = message.content.slice(prefix.length);
-    const args = commandBody.split(' ');
+    const commandBody = message.content.slice(prefix.length).trim();
+    var args = commandBody.split(' ');
+    args = args.filter(f => f !== ' '); //REMOVES ALL EXTRA SPACES
+    
     const command = args.shift().toLowerCase();
   
     switch(command.toUpperCase().trim() )
     {
-        case "CLEAR":
+      case "NUEVOUSUARIO":
+      case "USUARIONUEVO":
+      case "ADDUSER":
+      case "AÑADIRUSUARIO":
+      case "USERADD":
+      case "NEWUSER":
+        {
+          NewMember(message.member, message.channel)
+        }
+        break;
+
+      case "BAJAUSUARIO":
+      case "USUARIOBAJA":
+      case "DELETEUSER":
+      case "USERDELETE":
+      case "BORRARUSUARIO":
+        {
+          MemberLeaves(message.member, message.channel)
+        }
+        break;
+
+      case "NUEVAMONEDA":
+      case "MONEDANUEVA":
+      case "AÑADIRMONEDA":
+      case "ADDCOIN":
+      case "COINADD":
+      case "NEWCOIN":
+        {
+          if(args.length != 1)
+            message.reply("El comando debe tener un solo argumento")
+          else
           {
-            var numberMsgs = 100
-  
-            // if(args.length == 1)
-            // {
-            //   var aux = args.shift().toLowerCase();
-            //   if(!isNaN(aux))
-            //     numberMsgs = aux + 1;
-            //   else
-            //   {
-            //     message.reply("Error, debes especificar un número");
-            //     return;
-            //   }
-            // }
-  
-            DeleteMessages(numberMsgs, message.channel)
-          }
-          break;
-  
-          case "NEWCOIN":
-            {
-              if(args.length == 1)
+            var coinAddress = args.shift().toLowerCase().trim();
+
+            dbCon.ExecuteQueryAsync("select * from coins where address = '" + coinAddress + "'", (results,err) => {
+              if(results[0] != undefined)
+                message.reply("La moneda " + message.guild.cache.find(w => w.name == results[0].name).first().toString() + " ya existe");
+              else
               {
-                var coinAddress = args.shift().toLowerCase().trim();
-  
-                dbCon.ExecuteQueryAsync("select * from coins where address = '" + coinAddress + "'", (results,err) => {
-                  if(results[0] != undefined)
-                    message.reply("La moneda " + message.guild.cache.find(w => w.name == results[0].name).first().toString() + " ya existe");
+                GetDataFromHttps(_constants.GetConstant('urlApi') + coinAddress, (value,err) => {
+                  if (err) return console.error(err);
+
+                  if(value == undefined || value.hasOwnProperty("error"))
+                    message.reply("Error, no se ha encontrado en PancakeSwap el contrato: `" + coinAddress + '`' )
                   else
                   {
-                    GetDataFromHttps(_constants.GetConstant('urlApi') + coinAddress, (value,err) => {
-                      if (err) return console.error(err);
-  
-                      if(value == undefined || value.hasOwnProperty("error"))
-                        message.reply("Error, no se ha encontrado en PancakeSwap el contrato: `" + coinAddress + '`' )
-                      else
-                      {
-                        var coinSymbol = value.data.symbol;
+                    var coinSymbol = value.data.symbol;
 
-                        CreateChannel(coinSymbol, _constants.GetConstant('dbChannelId'),(channel,err) => {
+                    CreateChannel(coinSymbol, _constants.GetConstant('dbChannelId'),(channel,err) => {
 
-                          dbCon.ExecuteQuery("insert into coins values('" +  coinAddress + "', '" + value.data.name + "', '" + coinSymbol + "', '" + channel.id + "')");
-  
-                          // channel.send(coinAddress).then((msg) => msg.pin())
-                          channel.send(_constants.GetConstant('urlPooCoin') + coinAddress).then((msg) => msg.pin())
-                          message.reply("Moneda: " + channel.toString() + " añadida con éxito");
-                        });
-                      }
-  
+                      dbCon.ExecuteQuery("insert into coins values('" +  coinAddress + "', '" + value.data.name + "', '" + coinSymbol + "', '" + channel.id + "')");
+
+                      // channel.send(coinAddress).then((msg) => msg.pin())
+                      channel.send(_constants.GetConstant('urlPooCoin') + coinAddress).then((msg) => msg.pin())
+                      message.reply("Moneda: " + channel.toString() + " añadida con éxito");
                     });
                   }
+
                 });
-  
-  
               }
-            }
-          break;
-  
-          case "NUEVOUSUARIO":
+            });
+          }
+        }
+        break;
+
+        case "DELETECOIN":
+        case "COINDELETE":
+        case "BORRARMONEDA":
+        case "SUPRIMIRMONEDA":
+        case "OLVIDARMONEDA":
+          {
+            if(args.length != 1)
+              message.reply("El comando debe tener un solo argumento")
+            else
             {
-              NewMember(message.member, message.channel)
-            }
-            break;
-  
-          case "BAJAUSUARIO":
-            {
-              MemberLeaves(message.member, message.channel)
-            }
-            break;
-  
-          case "NUEVAALERTA":
-            {
-              if(args.length != 3)
-                message.reply("Número incorrecto de argumentos. " + exampleAddAlert)
+              var channelId = Helpers.FormatChannelId(args.shift().trim());
+              var channelCoin = message.guild.channels.cache.find(w => w.id == channelId);
+
+              if(channelCoin == undefined)
+                message.reply("Error, debe especificar el canal de la moneda.")
               else
               {
-                var channelId = Helpers.FormatChannelId(args.shift().trim());
-                // console.log(message.guild.channels.cache.find(w = w.id == channelId).first())
-                var channelCoin = message.guild.channels.cache.find(w => w.id == channelId);
-  
-                if(channelCoin == undefined)
-                  message.reply("Error, debe especificar el canal de la moneda. " + exampleAddAlert)
-                else
-                {
-                  var price = args.shift().trim();
-                  if(isNaN(price))
-                    message.reply("Error, debe especificar un precio. " + exampleAddAlert)
+                dbCon.ExecuteQueryAsync("select * from alerts where coinAddress = (select address from coins where idChannel = '" + channelCoin.id + "')", (results,err) => {
+                  if(results.length != 0 && results[0] != undefined)
+                    message.reply("No se puede eliminar una moneda que tiene alertas activas de algún usuario")
                   else
                   {
-                    var alertType = args.shift().toUpperCase().trim();
-                    if(!alertWords.includes(alertType))
-                      message.reply("Error, el tipo de alerta debe ser uno de: '"+ alertWords.join() + "'. " + exampleAddAlert)
-                    else
-                    {
-                      channelCoin.messages.fetchPinned()
-                      .then(messages => {
-                        var coinAddress = messages.first().content.replace(_constants.GetConstant('urlPooCoin'),'');
-                        
-                        dbCon.ExecuteQuery("insert into alerts(userId, coinAddress, priceUsd, alertType) values ('" + message.member.id + "', '" + coinAddress + "', '" + price +"', '" + alertType +"')")
-                        message.reply("Alerta añadida");
-                        UpdateAlertsResume(message.member.id)
-  
-                      });
-                    }
+                    dbCon.ExecuteQuery("delete from coins where idChannel = '" + channelCoin.id + "'");
+                    channelCoin.delete();
+                    message.reply("Moneda eliminada");
                   }
+                });
+              }
+            }
+          }
+          break;
+
+      case "NUEVAALERTA":
+      case "ALERTANUEVA":
+      case "NEWALERT":
+      case "AÑADIRALERTA":
+      case "ALERTAAÑADIR":
+      case "ADDALERT":
+        {
+          if(args.length != 3)
+            message.reply("Número incorrecto de argumentos. " + exampleAddAlert)
+          else
+          {
+            var channelId = Helpers.FormatChannelId(args.shift().trim());
+            // console.log(message.guild.channels.cache.find(w = w.id == channelId).first())
+            var channelCoin = message.guild.channels.cache.find(w => w.id == channelId);
+
+            if(channelCoin == undefined)
+              message.reply("Error, debe especificar el canal de la moneda. " + exampleAddAlert)
+            else
+            {
+              var price = args.shift().trim();
+              if(isNaN(price))
+                message.reply("Error, debe especificar un precio. " + exampleAddAlert)
+              else
+              {
+                var alertTypeWord = args.shift().toUpperCase().trim();
+
+                if(!_alertTypes.IsValidAlert(alertTypeWord))
+                  message.reply(_alertTypes.MessageWrongAlertTypeWord(alertTypeWord))
+                else
+                {
+                  channelCoin.messages.fetchPinned()
+                  .then(messages => {
+                    var coinAddress = messages.first().content.replace(_constants.GetConstant('urlPooCoin'),'');
+                    
+                    dbCon.ExecuteQuery("insert into alerts(userId, coinAddress, priceUsd, alertType) values ('" + message.member.id + "', '" + coinAddress + "', '" + price +"', '" + _alertTypes.GetAlertType(alertTypeWord) +"')")
+                    message.reply("Alerta añadida");
+                    UpdateAlertsResume(message.member.id)
+                  });
                 }
                 
+
+                // if(!alertWords.includes(alertTypeWord))
+                //   message.reply("Error, el tipo de alerta debe ser uno de: '"+ alertWords.join() + "'. " + exampleAddAlert)
+                // else
+                // {
+                //   channelCoin.messages.fetchPinned()
+                //   .then(messages => {
+                //     var coinAddress = messages.first().content.replace(_constants.GetConstant('urlPooCoin'),'');
+                    
+                //     dbCon.ExecuteQuery("insert into alerts(userId, coinAddress, priceUsd, alertType) values ('" + message.member.id + "', '" + coinAddress + "', '" + price +"', '" + alertTypeWord +"')")
+                //     message.reply("Alerta añadida");
+                //     UpdateAlertsResume(message.member.id)
+
+                //   });
+                // }
               }
             }
-            break;
+            
+          }
+        }
+        break;
+      
+      case "BORRARALERTA":
+      case "ALERTABORRAR":
+      case "DELETEALERT":
+      case "ALERTDELETE":
+      case "REMOVEALERT":
+        {
+          if(args.length != 3)
+            message.reply("Número incorrecto de argumentos. " + exampleAddAlert)
+          else
+          {
+            var channelId = Helpers.FormatChannelId(args.shift().trim());
+            // console.log(message.guild.channels.cache.find(w = w.id == channelId).first())
+            var channelCoin = message.guild.channels.cache.find(w => w.id == channelId);
 
-          case "LISTARALERTAS":
+            if(channelCoin == undefined)
+              message.reply("Error, debe especificar el canal de la moneda. " + exampleAddAlert)
+            else
             {
-              GetAlertsList(message.member.id, (msg,err) => {
-                message.reply(msg);
-              });
-            }
-            break;
-
-          case "BORRARALERTA":
-            {
-              if(args.length != 3)
-                message.reply("Número incorrecto de argumentos. " + exampleAddAlert)
+              var price = args.shift().trim();
+              if(isNaN(price))
+                message.reply("Error, debe especificar un precio. " + exampleAddAlert)
               else
               {
-                var channelId = Helpers.FormatChannelId(args.shift().trim());
-                // console.log(message.guild.channels.cache.find(w = w.id == channelId).first())
-                var channelCoin = message.guild.channels.cache.find(w => w.id == channelId);
-  
-                if(channelCoin == undefined)
-                  message.reply("Error, debe especificar el canal de la moneda. " + exampleAddAlert)
+                var alertTypeWord = args.shift().toUpperCase().trim();
+
+                if(!_alertTypes.IsValidAlert(alertTypeWord))
+                  message.reply(_alertTypes.MessageWrongAlertTypeWord(alertTypeWord))
                 else
                 {
-                  var price = args.shift().trim();
-                  if(isNaN(price))
-                    message.reply("Error, debe especificar un precio. " + exampleAddAlert)
-                  else
-                  {
-                    var alertType = args.shift().toUpperCase().trim();
-                    if(!alertWords.includes(alertType))
-                      message.reply("Error, el tipo de alerta debe ser uno de: '"+ alertWords.join() + "'. " + exampleAddAlert)
-                    else
-                    {
-                      channelCoin.messages.fetchPinned()
-                      .then(messages => {
-                        var coinAddress = messages.first().content.replace(_constants.GetConstant('urlPooCoin'),'');
-                        var sqlWhere = "where userId = '" + message.member.id + "' and coinAddress = '" + coinAddress + "' and priceUsd = '" + price + "' and alertType = '" + alertType +"'";
-                        
-                        dbCon.ExecuteQueryAsync("select * from alerts " + sqlWhere, (results,err) => {
-                          if(results.length != 0 && results[0] != undefined)
-                          {
-                            dbCon.ExecuteQuery("delete from alerts " + sqlWhere);
-                            message.reply("Alerta eliminada");
-                            UpdateAlertsResume(message.member.id)
-                          }
-                          else
-                            message.reply("No se ha encontrado la alerta");
-                        });
-                      });
-                    }
-                  }
+                  channelCoin.messages.fetchPinned()
+                  .then(messages => {
+                    var coinAddress = messages.first().content.replace(_constants.GetConstant('urlPooCoin'),'');
+                    var sqlWhere = "where userId = '" + message.member.id + "' and coinAddress = '" + coinAddress + "' and priceUsd = '" + price + "' and alertType = '" + _alertTypes.GetAlertType(alertTypeWord) +"'";
+                    
+                    dbCon.ExecuteQueryAsync("select * from alerts " + sqlWhere, (results,err) => {
+                      if(results.length != 0 && results[0] != undefined)
+                      {
+                        dbCon.ExecuteQuery("delete from alerts " + sqlWhere);
+                        message.reply("Alerta eliminada");
+                        UpdateAlertsResume(message.member.id)
+                      }
+                      else
+                        message.reply("No se ha encontrado la alerta");
+                    });
+                  });
                 }
               }
             }
-            break;
+          }
+        }
+        break;
+        
+      case "LISTALERTS":
+      case "ALERTSLIST":
+      case "ALERTASLISTAR":
+      case "LISTADOALERTAS":
+      case "LISTARALERTAS":
+        {
+          GetAlertsList(message.member.id, (msg,err) => {
+            message.reply(msg);
+          });
+        }
+        break;
+        
+      //ADMIN
+      case "CLEAR":
+      case "BORRAR":
+      {
+        if(IsAdmin())
+        {
+          var numberMsgs = 100
 
-          //ADMIN
-          case "NEWCONSTANT":
+          // if(args.length == 1)
+          // {
+          //   var aux = args.shift().toLowerCase();
+          //   if(!isNaN(aux))
+          //     numberMsgs = aux + 1;
+          //   else
+          //   {
+          //     message.reply("Error, debes especificar un número");
+          //     return;
+          //   }
+          // }
+
+          DeleteMessages(numberMsgs, message.channel)
+        }
+      }
+        break;
+
+      //ADMIN
+      case "NEWCONSTANT":
+      case "ADDCONSTANT":
+        {
+          if(IsAdmin(message))
+          {
+            if(args.length < 2)
+              message.reply("Debes incluir key y value");
+            else
             {
-              if(message.channel.parentId != _constants.GetConstant('adminCategoryId'))
-                return message.reply(_constants.GetConstantU('errorAdminText'))
-              if(args.length < 2)
-                message.reply("Debes incluir key y value");
+              var key = args.shift().trim()
+              var value = "";
+              args.forEach(element => {
+                value += element;
+              });
+              _constants.SetConstant(key, value)
+              message.reply("Constante añadida con éxito");
+            }
+          }
+        }
+        break;
+      
+      //ADMIN
+      case "LISTCONSTANTS":
+      case "CONSTANTSLIST":
+        {
+          if(IsAdmin(message))
+            return message.reply(_constants.ListConstants())
+        }
+        break;
+
+      //ADMIN
+      case "DELETECONSTANT":
+      case "REMOVECONSTANT":
+        {
+          if(IsAdmin(message))
+          {
+            if(args.length < 1)
+              message.reply("Debes incluir key");
+            else
+            {
+              var key = args.shift().trim()
+              if(_constants.GetConstant(key) == undefined)
+                message.reply("La key `" + key + "` no existe en las constantes");
               else
               {
-                var key = args.shift().trim()
-                var value = "";
-                args.forEach(element => {
-                  value += element;
-                });
-                _constants.SetConstant(key, value)
-                message.reply("Constante añadida con éxito");
+                _constants.DeleteConstant(key)
+                message.reply("Constante eliminada con éxito");
               }
             }
-            break;
-          
-          //ADMIN
-          case "LISTCONSTANTS":
+          }
+        }
+        break;
+
+      //ADMIN
+      case "MODIFYCONSTANT":
+      case "UPDATECONSTANT":
+      case "CONSTANTUPDATE":
+        {
+          if(IsAdmin(message))
+          {
+            if(args.length < 2)
+              message.reply("Debes incluir key y value");
+            else
             {
-              if(message.channel.parentId != _constants.GetConstant('adminCategoryId'))
-                return message.reply(_constants.GetConstantU('errorAdminText'))
-              
-              return message.reply(_constants.ListConstants())
+              var key = args.shift().trim()
+              var value = "";
+              args.forEach(element => {
+                value += element;
+              });
+              _constants.SetConstant(key, value)
+              message.reply("Constante modificada con éxito");
             }
-            break;
-          
-  
-          case "T":
-            {
-              // dbCon.ExecuteQueryAsync("describe coins", (results,err) => {
-              //   // results.forEach(result => {
-              //     console.log(results[0]);
-              //   // });
-              // });
-            }
-            break;
+          }
+        }
+        break;
+
+      //ADMIN
+      //ADD COMMAND TO DELETE USER ONLY FOR ADMIN. IT SHOULD DELETE ROLE, CHANNELS AND ALL HIS INFO IN THE DATABASE
+      
+      //ADMIN
+      case "T":
+      case "TEST":
+        {
+          if(IsAdmin(message))
+          {
+            
+          }
+        }
+        break;
+
+      default:
+        message.reply("El comando `" +  command.trim() + "` no existe")
     }
   })
 } catch (error) {
@@ -445,7 +619,13 @@ function DeleteMessages(ammount, channel)
 
 function IsAdmin(message)
 {
-  if(user)
+  if(message.member.roles.cache.some(role => role.id == _constants.GetConstant('adminRoleId')) || message.channel.parentId != _constants.GetConstant('adminCategoryId'))
+    return true;
+  else
+  {
+    message.reply("Solo un administrador puede ejecutar este comando");
+    return false;
+  }
 }
 
 async function FillDB()
@@ -619,13 +799,15 @@ function UpdateResume(coinAddress, dataFromHttps)
 function CheckAlerts(coinAddress, price)
 {
   try {
-    var sql = "select * from alerts where coinAddress = '" + coinAddress + "' and userId in (select id from users where active = true)";
+    var alertsCooldown = _constants.GetConstant('alertsCooldown')
+
+    var sql = "select * from alerts where coinAddress = '" + coinAddress + "' and userId in (select id from users where active = true and (lastAlert is null or lastAlert <= '" + Helpers.DateToSql(Helpers.AddHoursToDate((alertsCooldown * -1), Date.now()))  + "'))";
 
     dbCon.ExecuteQueryAsync(sql, (tableAlerts,err) => {
       if(!err)
       {
         tableAlerts.forEach(rowAlerts => {
-          var alertType = Helpers.AlertTypeHandler(rowAlerts.alertType);
+          var alertType = _alertTypes.GetAlertSigne(rowAlerts.alertType);
 
           if(Helpers.IsGreaterOrLesserHandler(alertType, price, rowAlerts.priceUsd))
           {
@@ -633,7 +815,6 @@ function CheckAlerts(coinAddress, price)
               NotifyAlert(rowAlerts, price);
             else
             {
-              var alertsCooldown = _constants.GetConstant('alertsCooldown')
               if(Helpers.HourDifBetweenDates(Date.now(), rowAlerts.lastAlert) > alertsCooldown)
               {
                 var newDate = Helpers.AddHoursToDate(alertsCooldown, rowAlerts.lastAlert)
@@ -730,4 +911,4 @@ function LoadResumeAlerts()
 
 
 
- setInterval(FillDB, 1000 * 60 * 5) //Debería ser 1000 * 60 * 5   (5 mins)
+ setInterval(FillDB, 1000 * 60 * 1) //Debería ser 1000 * 60 * 1  (1 min)
