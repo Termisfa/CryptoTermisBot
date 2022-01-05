@@ -59,18 +59,6 @@ module.exports = function(BotLog, _constants){
           return rawId.replace('<','').replace('>','').replace('#','');
         }
 
-        static AlertTypeHandler(alertType)
-        {
-            switch (alertType) {
-                case "SUBE": return '>='; break;
-                case "BAJA": return '<='; break;
-                    
-                default:
-                    break;
-            }
-        }
-
-
         static IsGreaterOrLesserHandler(option, ammount1, ammount2)
         {
             switch (option) {
@@ -85,13 +73,12 @@ module.exports = function(BotLog, _constants){
                     break;
             }
         }
-        
     
-        static UnixToSqlDatetime(UNIX_timestamp)
+        static UnixToSqlDatetime(UNIX_timestamp, sqlFormat = true)
         {
           try {
             var date = new Date(UNIX_timestamp);
-            return dateToSql(date);
+            return dateToSql(date, sqlFormat);
 
             
           } catch (error) {
@@ -99,15 +86,15 @@ module.exports = function(BotLog, _constants){
           }
         }
 
-        static DateToSql(date)
+        static DateToSql(date, sqlFormat = true)
         {
-            return dateToSql(date);
+            return dateToSql(date, sqlFormat);
         }
 
         static HourDifBetweenDates(date1, date2)
         {
             try {
-                return Math.abs(date1 - date2) / 36e5; //36e5 is the scientific notation for 60*60*1000
+                return Math.round(Math.abs(date1 - date2) / 36e5); //36e5 is the scientific notation for 60*60*1000
             } catch (error) {
                 BotLog(error, error, "HourDifBetweenDates", true)
             }
@@ -116,7 +103,7 @@ module.exports = function(BotLog, _constants){
         static AddHoursToDate(ammountHours, date)
         {
             try {
-                return date.addHours(ammountHours)
+                return (new Date(date)).addHours(ammountHours)
             } catch (error) {
                 BotLog(error, error, "AddHoursToDate", true)
             }
@@ -170,14 +157,12 @@ module.exports = function(BotLog, _constants){
     return Helpers;
 }
 
-function getGuild(client)
+function GetGuild(client)
 {
   try {
-  return client.guilds.cache.get(constants.GetConstant('serverId'));
-  
+    return client.guilds.cache.get(constants.GetConstant('serverId'));
   } catch (error) {
-    console.log(error)
-    throw error
+    BotLog(error, error, "getGuild", true)
   }
 }
 
@@ -232,19 +217,30 @@ function IsLesserOrEqualThan(ammount1, ammount2)
     return ammount1 <= ammount2;
 }
 
-Date.prototype.addHours = function(h) {
-    this.setTime(this.getTime() + (h*60*60*1000));
-    return this;
-  }
-
-function dateToSql(date)
+function dateToSql(date, sqlFormat = true)
 {
-    var year = date.getFullYear();
-    var month = date.getMonth();
-    var day = date.getDate();
-    var hour = "0" + date.getHours();
-    var min = "0" + date.getMinutes();
-    var sec = "0" + date.getSeconds();
-    var time = year + '-' + month + '-' + day + ' ' + hour.substr(-2) + ':' + min.substr(-2) + ':' + sec.substr(-2) ;
-    return time;
+  var separator = "";
+
+  if(sqlFormat)
+    separator = " ";
+  else
+    separator = "_"
+
+  var year = date.getFullYear();
+  var month = "0" + (date.getMonth() + 1);
+  var day = "0" + date.getDate();
+  var hour = "0" + date.getHours();
+  var min = "0" + date.getMinutes();
+  var sec = "0" + date.getSeconds();
+  var time = year + '-' + month.substr(-2) + '-' + day.substr(-2) + separator + hour.substr(-2) + ':' + min.substr(-2) + ':' + sec.substr(-2) ;
+
+  if(!sqlFormat)
+    time = time.replace(':', '');
+
+  return time;
+}
+
+Date.prototype.addHours = function(h) {
+  this.setTime(this.getTime() + (h*60*60*1000));
+  return this;
 }

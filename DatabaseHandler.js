@@ -6,25 +6,17 @@ var BotLog;
 
 module.exports = class DatabaseHandler
 {
-    constructor(_BotLog)
+    constructor(_BotLog, _host, _port, _database, _user, _passw)
     {
         BotLog = _BotLog
 
         pool = mysql.createPool({
-            host     : 'mysqlcryptoserver',
-            port     : '3306',
-            database : 'cryptobot',
-            user     : 'root',
-            password : 'secret',
+            host     : _host,
+            port     : _port,
+            database : _database,
+            user     : _user,
+            password : _passw,
         });
-
-        // pool = mysql.createPool({
-        //     host     : 'localhost',
-        //     port     : '33061',
-        //     database : 'cryptobot',
-        //     user     : 'root',
-        //     password : 'secret',
-        // });
     }
 
     ExecuteQueryAsync(sql, callback)
@@ -71,7 +63,7 @@ module.exports = class DatabaseHandler
     }
     
     
-    static from (BotLog) {
-        return new this(BotLog)
+    static from (BotLog, host, port, database, user, passw) {
+        return new this(BotLog, host, port, database, user, passw)
       }
 }

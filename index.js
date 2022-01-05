@@ -1,12 +1,40 @@
+//false for PRO and true for TEST
+const isTest = false;
+
+
+
+
+
 const https = require('https');
 const fs = require('fs');
 
 const dotenv = require('dotenv');
 dotenv.config();
 
-// const Discord = require("discord.js");
-const token = process.env.BOT_TOKEN;
-const prefix = process.env.PREFIX;
+var token, prefix, host, port, database, user, passw;
+
+if(!isTest)
+{
+  token = process.env.BOT_TOKEN;
+  prefix = process.env.PREFIX;
+  host = process.env.HOST;
+  port = process.env.PORT;
+  database = process.env.DATABASE;
+  user = process.env.USER;
+  passw = process.env.PASSWORD;
+}
+else
+{
+  token = process.env.TEST_BOT_TOKEN;
+  prefix = process.env.TEST_PREFIX;
+  host = process.env.TEST_HOST;
+  port = process.env.TEST_PORT;
+  database = process.env.TEST_DATABASE;
+  user = process.env.TEST_USER;
+  passw = process.env.TEST_PASSWORD;
+}
+
+
 
 
 
@@ -48,7 +76,7 @@ function BotLog(discordMsg, logMsg, method, error = false)
 
 
 var DatabaseHandler = require('./DatabaseHandler')
-var dbCon = DatabaseHandler.from(BotLog)
+var dbCon = DatabaseHandler.from(BotLog, host, port, database, user, passw)
 
 var Constants = require('./Constants');
 var _constants = Constants.from(BotLog, dbCon)
@@ -60,6 +88,7 @@ var _alertTypes = AlertTypes.from(BotLog)
 
 
 var Helpers = require('./Helpers')(BotLog, _constants)
+var DbBackup = require('./DbBackup')(BotLog, dbCon, Helpers)
 
 
 const schedule = require('node-schedule');
@@ -68,27 +97,27 @@ schedule.scheduleJob('0 0 0 * * ?', () => MysqlBackup()); //Every day at midnigh
 
 function MysqlBackup()
 {
-  var guild = Helpers.GetGuild(client);
+  DbBackup.GetBackup((result, err) => {
+    var fileName = "CryptobotBackup" + Helpers.DateToSql(new Date(), false) + ".sql";
+    fs.writeFile(fileName, result, err => {
+      if (err) {
+        BotLog(err, err, "BackupWriteFile", true)
+        return
+      }
 
-  
-
-  let ahora = new Date()
-  let path = './checker/'
-
-  fs.closeSync(fs.openSync(path + ahora.getHours(), 'w'))
-
-  ahora.setHours(ahora.getHours() - 1)
-
-  path += ahora.getHours();
-
-  if(fs.existsSync(path))
-    fs.unlinkSync(path) //Borrar el archivo de la hora anterior si existe  
+      client.guilds.cache.get(_constants.GetConstant('serverId')).channels.cache.get(_constants.GetConstant('backupsChannelId')).send({
+        files: [
+          fileName
+        ]
+      });
+    })
+  });
 }
 
 
 client.once('ready', c => {
   BotLog("Bot iniciado", '', "onReady")
-  LoadResumeAlerts()
+  LoadResumeAlerts();
 });
 
 
@@ -204,6 +233,10 @@ function MemberLeaves(member, channel)
 //Event when a message is sent
 try {
   client.on("messageCreate", function(message) {
+
+    if(message.type == "CHANNEL_PINNED_MESSAGE")
+      message.delete();
+
     if (message.author.bot) return;
     if (!message.content.startsWith(prefix)) return;
   
@@ -442,7 +475,7 @@ try {
       case "CLEAR":
       case "BORRAR":
       {
-        if(IsAdmin())
+        if(IsAdmin(message))
         {
           var numberMsgs = 100
 
@@ -549,7 +582,7 @@ try {
         {
           if(IsAdmin(message))
           {
-            
+            Helpers.GetGuild(client).channels.cache.find(w => w.id == '924699576735260692').messages.fetch('925372754516135977').then(msg => msg.delete())
           }
         }
         break;
@@ -731,7 +764,8 @@ async function FillPriceDB(channelInfo)
                 {
                   if(table[0] == undefined)
                   {
-                    dbCon.ExecuteQueryAsync("insert into prices values('" + coinAddress + "', '" + dataFromHttps.data.price + "', '" + sqlDateTime + "')", (results,err) => {
+                    var sqlInsert = "insert into prices values('" + coinAddress + "', '" + dataFromHttps.data.price + "', '" + sqlDateTime + "')";
+                    dbCon.ExecuteQueryAsync(sqlInsert, (results,err) => {
                       if(!err)
                       {
                         channelInfo.send(Helpers.FormatDataFromHttpsToDatabaseChannel(dataFromHttps, previousPrice))
@@ -777,7 +811,7 @@ function UpdateResume(coinAddress, dataFromHttps)
                     coinName = dataFromHttps.data.name.trim();
 
                     messages.forEach(message => {
-                        if(message.content.includes(coinName) || message.content.includes("en este canal. Ver todos los")) //To remove previous msgs and pinned alerts
+                        if(message.content.includes(coinName)) //To remove previous msgs
                           message.delete();
                       });
 
@@ -858,7 +892,9 @@ function NotifyAlert(alertsRow, price)
 
         var alertsChannel = guild.channels.cache.find(w => w.parentId == idCategoryChannel && w.name.includes("alertas"));
 
-        dbCon.ExecuteQuery("update alerts set lastAlert = NOW() where id = '" + alertsRow.id + "'");
+        var dateNow = Helpers.UnixToSqlDatetime(Date.now());
+
+        dbCon.ExecuteQuery("update alerts set lastAlert = '" + dateNow + "' where id = '" + alertsRow.id + "'");
         alertsChannel.send("<@" + alertsRow.userId + "> La moneda " + channelCoin.toString() + " está en `" + price.substr(0, _constants.GetConstant('priceLength')) + "` USD")
       }
     });

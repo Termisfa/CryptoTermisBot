@@ -14,8 +14,6 @@ module.exports = class Constants
         BotLog = _BotLog
         dbCon = _dbCon
 
-        dictionary = new Object();
-
         InitializeDict();
     }
 
@@ -27,6 +25,16 @@ module.exports = class Constants
             return dictionary[key];
         } catch (error) {
             BotLog(error, error, "GetConstant", true)
+        }
+    }
+
+    DeleteConstant(key)
+    {
+        try {
+            var sql = "delete from constants where name = '" + key + "'";
+            dbCon.ExecuteQuery(sql);
+        } catch (error) {
+            BotLog(error, error, "DeleteConstant", true)
         }
     }
 
@@ -78,6 +86,8 @@ module.exports = class Constants
 
 function InitializeDict()
 {
+    dictionary = new Object();
+
     var sql = "select * from constants";
 
     dbCon.ExecuteQueryAsync(sql, (table,err) => {

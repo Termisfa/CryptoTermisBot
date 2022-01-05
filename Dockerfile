@@ -56,3 +56,8 @@ CMD ["./startBot.sh"]
 #-------------------
 #ENTER MYSQL SHELL
 #docker exec -it mysqlcryptoserver mysql -p
+
+#-------------------
+#ENTER TO CONTAINER
+#docker exec -it mysqlcryptoserver /bin/bash
+#docker exec -it cryptobot sh
