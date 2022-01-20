@@ -1,0 +1,13 @@
+
+MAILTO=""
+
+@reboot source /.bash_aliases
+@reboot docker start bot
+@reboot docker start mysqlcryptoserver
+@reboot docker start cryptobot
+@reboot sudo service motion stop
+
+@daily sh /motion/removeOldFiles.sh
+
+0 * * * * sh /home/pi/checker/checkBot.sh `date "+\%H"`
+0 * * * * sh /home/pi/checkerCrypto/checkCryptoBot.sh `date "+\%H"`

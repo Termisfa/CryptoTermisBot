@@ -35,9 +35,8 @@ else
 }
 
 
-
-
-
+const AutoRestart = require('./AutoRestart');
+AutoRestart.initiate();
 
 
 const { Client, Intents, Channel, Message } = require('discord.js');
@@ -288,7 +287,8 @@ try {
               else
               {
                 GetDataFromHttps(_constants.GetConstant('urlApi') + coinAddress, (value,err) => {
-                  if (err) return console.error(err);
+                  if(value == undefined) return;
+                  if (err) BotLog(error, error, 'NewCoin', true);
 
                   if(value == undefined || value.hasOwnProperty("error"))
                     message.reply("Error, no se ha encontrado en PancakeSwap el contrato: `" + coinAddress + '`' )
@@ -754,6 +754,7 @@ async function FillPriceDB(channelInfo)
               previousPrice = resultSqlPrevprice[0].priceUsd;
 
             GetDataFromHttps(_constants.GetConstant('urlApi') + coinAddress, (dataFromHttps,err) => {
+              if(dataFromHttps == undefined) return;
               if (err) return BotLog(error, error, 'FillPriceDB', true);
 
               var sqlDateTime = Helpers.UnixToSqlDatetime(dataFromHttps.updated_at);
@@ -780,7 +781,7 @@ async function FillPriceDB(channelInfo)
           });
         })
       })
-      .catch((error) => {BotLog(error, error, GetFuncName(), true)});
+      .catch((error) => {BotLog(error, error, 'FillPriceDB', true)});
     }
   } catch (error) {
     BotLog(error, error, "FillPriceDB", true)
@@ -919,8 +920,12 @@ function GetDataFromHttps(url, callback)
 
       // The whole response has been received. Print out the result.
       resp.on('end', () => {
-        callback(JSON.parse(data));
-
+        try {
+          callback(JSON.parse(data));
+        } catch (error) {
+          BotLog(error, error, "GetDataFromHttps || Trying to parse data", true)
+          callback(undefined);
+        }
       });
 
     }).on("error", (err) => {
@@ -930,6 +935,7 @@ function GetDataFromHttps(url, callback)
     });
   } catch (error) {
     BotLog(error, error, "GetDataFromHttps", true)
+    callback(undefined)
   }
 }
      
